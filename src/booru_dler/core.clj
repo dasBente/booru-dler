@@ -71,15 +71,27 @@
       (extract-image-url)
       (flatten)))
 
-(defn download-from
-  "Download from a list of urls"
-  [urls]
-  (pmap slurp urls))
+(defn download-to
+  ""
+  [directory urls]
+  (pmap (fn [url] 
+          (let [f-name (last (str/split url #"/"))]
+            (spit (clojure.java.io/file directory f-name) 
+                  (slurp url)
+                  :append false)))
+        urls))
 
 (defn dev-null
   "Discards any args, can be used to suppress return values"
   [& args]
   nil)
+
+(defn download-images
+  ([directory tags limit pages]
+   (let [imgs (query-to-urls tags limit pages)]
+     (download-to directory imgs)))
+  ([directory tags pages]
+   (download-images directory tags 100 pages)))
 
 (defn -main
   "I don't do a whole lot ... yet."
