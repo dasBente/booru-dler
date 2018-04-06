@@ -5,13 +5,15 @@
 
 (defn parse-args
   "Parses the arguments supplied to a query parameter"
-  [args]
-  (cond (string? args) args
-        (sequential? args) (str/join "+" args)
-        (coll? args) (parse-args (seq args))
-        :else (str args)))
+  [& args]
+  (str/join "+" (map (fn [arg] (cond (string? arg) arg
+                                     (sequential? arg) (apply parse-args arg)
+                                     (coll? arg) (apply parse-args (seq arg))
+                                     (keyword? arg) (name arg)
+                                 :else (str arg)))
+                 args)))
 
-(defn php-query 
+(defn php-query
   "Creates a PHP-style query URL"
   ([page script query-vect]
    (let [queries (str/join "&" 
@@ -96,4 +98,4 @@
 (defn -main
   "I don't do a whole lot ... yet."
   [& args]
-  (println "Hello, World!"))
+  (apply download-images args))
