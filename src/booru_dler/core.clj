@@ -1,6 +1,7 @@
 (ns booru-dler.core
   (:require [clojure.string :as str]
-            [clojure.xml :as xml])
+            [clojure.xml :as xml]
+            [clojure.tools.cli :refer [parse-opts]])
   (:gen-class))
 
 (defn parse-args
@@ -10,8 +11,8 @@
                                      (sequential? arg) (apply parse-args arg)
                                      (coll? arg) (apply parse-args (seq arg))
                                      (keyword? arg) (name arg)
-                                 :else (str arg)))
-                 args)))
+                                     :else (str arg)))
+                     args)))
 
 (defn php-query
   "Creates a PHP-style query URL"
@@ -31,7 +32,7 @@
               {:page "dapi"
                :s "post"
                :q "index"
-               :tags (if (empty? tags) "all" tags)
+               :tags (if (empty? tags) "" tags)
                :limit limit
                :pid (* (dec page) limit)}))
   ([tags page]
@@ -73,15 +74,18 @@
       (extract-image-url)
       (flatten)))
 
+(defn download-image-to
+  [directory url name]
+  (spit (clojure.java.io/file directory name) (slurp url) :append false))
+
 (defn download-to
-  ""
   [directory urls]
-  (pmap (fn [url] 
-          (let [f-name (last (str/split url #"/"))]
-            (spit (clojure.java.io/file directory f-name) 
-                  (slurp url)
-                  :append false)))
-        urls))
+  (map (fn [url]
+         (print "test")
+         (let [f-name (last (str/split url #"/"))]
+           (print "Downloading from" url "to" (str directory "/" f-name))
+           (download-image-to directory url f-name)))
+       urls))
 
 (defn dev-null
   "Discards any args, can be used to suppress return values"
@@ -90,12 +94,52 @@
 
 (defn download-images
   ([directory tags limit pages]
+   (print "Downloading pages" pages "at" limit "images per page with tags" tags "to" directory)
    (let [imgs (query-to-urls tags limit pages)]
      (download-to directory imgs)))
   ([directory tags pages]
    (download-images directory tags 100 pages)))
 
+(defn range?
+  [r]
+  (let [s (str/split r #"-")]
+    (when (= 2 (count s)) (try (doall (map #(Integer/parseInt %) s))
+                             (catch Exception e)))))
+
+(defn parse-range
+  [r]
+  (let [r? (range? r)] 
+    (when r? (range (first r?) (inc (second r?))))))
+
+(defn parse-pages 
+  [pages]
+  (flatten (map (fn [i] (if (range? i) (parse-range i) (Integer/parseInt i))) 
+                (str/split pages #","))))
+
+(def cli-options
+  [["-t" "--tags TAGS" "Tags for the search query"
+    :default []
+    :parse-fn #(str/split % #" ")]
+   ["-d" "--directory DOWNLOAD-DIRECTORY" "Directory to download to"
+    :default (System/getProperty "user.dir")]
+   ["-p" "--pages PAGES" "Pages to download (form: \"1,2,3,4-6\""
+    :default nil
+    :parse-fn parse-pages]
+   ["-l" "--limit LIMIT" "Image limit per page"
+    :default 100
+    :parse-fn #(Integer/parseInt %)]
+   ["-h" "--help"]])
+
 (defn -main
   "I don't do a whole lot ... yet."
   [& args]
-  (apply download-images args))
+  (let [opts (parse-opts args cli-options)]
+    (if (get-in opts [:options :help])
+      (print (:summary opts))
+      (if (not-empty (:errors opts))
+        (print (:errors opts))
+        (let [tags (get-in opts [:options :tags])
+              limit (get-in opts [:options :limit])
+              pages (get-in opts [:options :pages])
+              dir (get-in opts [:options :directory])]
+          (download-images dir tags limit pages))))))
